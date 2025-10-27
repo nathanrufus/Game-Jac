@@ -7,6 +7,7 @@ node Room {
 node Player {
     has name: str;
     has health: int = 100;
+    has inventory: list = [];
 }
 
 node Monster {
@@ -28,7 +29,7 @@ walker SetupGame {
 }
 walker Explore {
     has player: node;
-    has current_room: node;
+    has direction: str;
 
     can start with `root entry;
 }
@@ -85,7 +86,7 @@ walker Battle {
         }
 
         # Ask CheckEnd to evaluate game end state
-        here spawn CheckEnd;
+        here spawn CheckEnd();
         disengage;
     }
 }
@@ -105,7 +106,7 @@ walker CollectTreasure {
         report "👜 Added " + self.treasure.name + " to " + here.name + "'s inventory.";
 
         # Trigger check for victory
-        here spawn CheckEnd;
+        here spawn CheckEnd();
         disengage;
     }
 }
@@ -184,15 +185,15 @@ walker PlayGame {
     can start with Player entry {
         # Ask user for command
         report "👉 Command (move/status/quit): ";
-        cmd = input();
+        cmd = input("Enter command: ");
 
         if cmd == "move" {
             report "Direction (north/east/south/west): ";
             dir = input();
-            here spawn Explore(direction=dir);
+            here spawn Explore(player=here ,direction=dir);
         }
         elif cmd == "status" {
-            here spawn Status;
+            here spawn Status();
         }
         elif cmd == "quit" {
             report "👋 Goodbye!";
@@ -203,24 +204,18 @@ walker PlayGame {
         }
 
         # Always check end conditions
-        here spawn CheckEnd;
+        here spawn CheckEnd();
 
         # Continue game — recursively call itself
-        here spawn PlayGame;
+        here spawn PlayGame();
     }
 }
 walker FindPlayer {
-    can start with root entry {
+    can start with `root entry {
         # Try to find a Player node connected to root
         players = [root ->:Player:->];
         if len(players) == 0 {
             report "⚠️ No Player found. Creating a new one...";
-
-            # Create and link a default Player
-            player = Player(name="Hero");
-            root +>:Player:+> player;
-
-            report "✅ Player 'Hero' created and linked to root.";
         } else {
             player = players[0];
         }
@@ -231,7 +226,7 @@ walker FindPlayer {
         report "Commands: move / status / quit";
 
         # Start the main game walker
-        player spawn PlayGame;
+        player spawn PlayGame();
         disengage;
     }
 }

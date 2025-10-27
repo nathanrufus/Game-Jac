@@ -18,82 +18,91 @@ impl  SetupGame.create {
     Hero = Player(name="Hero");
     Goblin = Monster(name="Goblin", strength=20, damage=10);
     Gold = Treasure(value=100);
-    root ++>Hero;
+    root +>:Player(name="Hero"):+> Hero;
     # --- Place Entities Using Explicit Edge Connections ---
     MonsterRoom +>:Contains:+> Goblin;
     TreasureRoom +>:Contains:+> Gold;
     Hero +>:LocatedIn:+> StartRoom;
     
-    report "✅ Dungeon created successfully!";
+    report " Dungeon created successfully!";
     report "Rooms: StartRoom, MonsterRoom, TreasureRoom, TrapRoom";
     report "Player placed in StartRoom";
     report "Monster (Goblin) in MonsterRoom";
     report "Treasure in TreasureRoom";
 }
 impl Explore.start {
-    # --- Step 1: Determine player's current room (explicit bracket expression) ---
-    located = [self.player ->:LocatedIn:->];    # nodes that player points to via LocatedIn
+    # --- Step 1️: Find current room ---
+    located = [self.player ->:LocatedIn:->];
     if len(located) == 0 {
-        report "Player has no LocatedIn edge; cannot determine current room.";
+        report " Player has no current room — cannot move.";
         disengage;
     }
     current_room = located[0];
-    report "You are now in: " + current_room.name;
+    report " Current room: " + current_room.name;
 
-    #  Step 2: List available Path exits (typed edge reference) ---
-    exits = [current_room ->:Path:->];   # nodes reached from current_room via Path edges
+    # --- Step 2️: Find available exits ---
+    exits = [current_room ->:Path:->];
     if len(exits) == 0 {
-        report "ℹ No exits from this room.";
-    } else {
-        report "Available exits:";
-        for r in exits {
-            # If your Path edges include a direction attribute on the edge object,
-            # and you need that text, fetch edge objects instead (see note below).
-            report " - " + r.name;
+        report " No exits from this room!";
+        disengage;
+    }
+
+    # --- Step 3️: Find the path matching the given direction ---
+    path_found = null;
+    for e in exits {
+        if e.direction == self.direction {
+            path_found = e;
+            break;
         }
     }
 
-    # --- Step 3: Move the player (auto-choose 'north' if a room's name or edge attr indicates it) ---
-    moved = False;
-    # Try to detect a 'north' exit by checking connected rooms' names or edge attributes.
-    # (Prefer edge objects if you set direction on Path edges; see NOTE.)
-    for r in exits {
-        # Heuristic: if room name contains 'Monster' or 'Treasure' we still accept it;
-        # for deterministic demo we choose the first exit whose name or edge suggests 'north'.
-        # If you prefer to require checking the Path edge's direction, use edge objects as shown in NOTE.
-        moved = True;
-        target = r;
-        break;
+    if path_found == null {
+        report " No path leading " + self.direction + ".";
+        disengage;
     }
 
-    if moved {
-        # Create/update LocatedIn using connect operator (explicit style you prefer)
-        self.player +>:LocatedIn:+> target;
-        report "🚶 Moved to: " + target.name;
-        current_room = target;
-    } else {
-        report "ℹStayed in: " + current_room.name;
+    # --- Step 4️: Move player to the connected room ---
+    target_rooms = [path_found ->:Path:->];
+    if len(target_rooms) == 0 {
+        report " Path has no destination.";
+        disengage;
     }
 
-    # --- Step 4: Check for monsters or treasure in the new room ---
-    contents = [current_room ->:Contains:->];
+    new_room = target_rooms[0];
+
+    # Remove old LocatedIn edge first
+    playercurrentroom=[self.player ->:LocatedIn:-> current_room];
+    del playercurrentroom[0];
+
+    # Add new LocatedIn edge to target room
+    self.player +>:LocatedIn:+> new_room;
+    report "🚶 You moved " + self.direction + " to " + new_room.name;
+
+    # --- Step 5️⃣: Encounter room contents ---
+    contents = [new_room ->:Contains:->];
+    if len(contents) == 0 {
+        report "🔎 The room is quiet...";
+    }
     for ent in contents {
         if ent.type_name == "Monster" {
-            report " Encountered a monster: " + ent.name;
-            root spawn Battle(player=self.player, monster=ent);
+            report "💀 A " + ent.name + " appears!";
+            root spawn Battle(monster=ent);
         } elif ent.type_name == "Treasure" {
-            report " Found a treasure!";
-            root spawn CollectTreasure(player=self.player, treasure=ent);
-        } else {
-            report " Found: " + ent.type_name + " -> " + ent.name;
+            report "💰 You found a treasure!";
+            root spawn CollectTreasure(treasure=ent);
         }
     }
 
-    # --- Step 5: Show exits after move ---
-    exits_after = [current_room ->:Path:->];
-    report "Exits from here:";
-    for e in exits_after {
-        report " - " + e.name;
+    # --- Step 6️⃣: Show new exits ---
+    new_exits = [new_room ->:Path:->];
+    if len(new_exits) > 0 {
+        report "🚪 Exits:";
+        for r in new_exits {
+            report " - " + r.name;
+        }
+    } else {
+        report "❌ No exits from here!";
     }
+
     disengage;
 }
